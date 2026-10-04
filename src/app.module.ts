@@ -5,6 +5,8 @@ import { AppService } from './app.service.js';
 import { ConfigModule } from '@nestjs/config';
 import { CategoriesModule } from './categories/categories.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { UsuariosModule } from './usuarios/usuarios.module.js';
+import { UsersModule } from './users/users.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -26,6 +28,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     CategoriesModule,
     PrismaModule,
+    UsuariosModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

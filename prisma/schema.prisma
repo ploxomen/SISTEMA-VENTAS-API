@@ -1,9 +1,13 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+enum DocumentType {
+  DNI
+  PASAPORTE
+  CARNET_EXTRANJERIA
+}
+enum StatusUser {
+  ONLINE
+  DISABLED
+  RESTORE
+}
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -32,4 +36,21 @@ model SubCategory {
   updatedAt  DateTime @updatedAt
   @@index([categoryId])
   @@map("sub_categories")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  documentType   DocumentType
+  documentNumber String   @unique
+  lastName  String
+  firstName String
+  email     String   @unique
+  password  String
+  address   String?
+  phone     String?
+  dateOfBirth DateTime?
+  status    StatusUser @default(RESTORE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("users")
 }
