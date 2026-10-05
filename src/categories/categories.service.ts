@@ -54,7 +54,7 @@ export class CategoriesService {
         },
       },
       orderBy: {
-        name: 'asc',
+        name: 'desc',
       },
     });
   }
@@ -77,10 +77,10 @@ export class CategoriesService {
     }
     return category;
   }
-  async update(id: number, updateCategoryDto: UpdateCategoryDto) {
+  async update(id: number, updateCategoryDto: UpdateCategoryDto) : Promise<ApiResourcesResponse<Category>> {
     await this.findOne(id);
     const { subCategories, ...categoryData } = updateCategoryDto;
-    return this.prisma.category.update({
+    await this.prisma.category.update({
       where: { id },
       data: {
         ...categoryData,
@@ -105,14 +105,22 @@ export class CategoriesService {
         subCategories: true,
       },
     });
+    return {
+      message: "Categoría actualizada correctamente",
+      success: true
+    }
   }
-  async remove(id: number) {
+  async remove(id: number) : Promise<ApiResourcesResponse<Category>> {
     await this.findOne(id);
-    return this.prisma.category.delete({
+    await this.prisma.category.delete({
       where: { id },
       include: {
         subCategories: true,
       },
     });
+    return {
+      message: "Categoría eliminada correctamente",
+      success: true
+    }
   }
 }

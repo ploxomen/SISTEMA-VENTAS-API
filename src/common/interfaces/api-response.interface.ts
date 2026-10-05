@@ -9,7 +9,7 @@ export interface ApiListResponse<T> {
   pagination: ApiPagination;
 }
 export interface ApiResourcesResponse<T> {
-  data: T;
+  data?: T;
   success?: boolean;
   message: string;
   error?: boolean;
