@@ -19,6 +19,10 @@ class CreateSubCategoryDto {
 }
 
 export class CreateCategoryDto {
+  @IsNumber()
+  @IsOptional()
+  id?: number;
+  
   @IsString()
   @IsNotEmpty()
   name: string;

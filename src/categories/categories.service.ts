@@ -3,24 +3,29 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
 import { PaginationDto } from '../common/dto/pagination.dto.js';
-import { ApiListResponse } from '../common/interfaces/api-response.interface.js';
+import {
+  ApiListResponse,
+  ApiResourcesResponse,
+} from '../common/interfaces/api-response.interface.js';
 import { paginate } from '../common/utils/paginate.utils.js';
+import { Category } from '../generated/prisma/client.js';
 
 @Injectable()
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
-  async create(createCategoryDto: CreateCategoryDto) {
+  async create(
+    createCategoryDto: CreateCategoryDto,
+  ): Promise<ApiResourcesResponse<Category>> {
     const { subCategories, ...categoryData } = createCategoryDto;
-    return this.prisma.category.create({
+    const category = await this.prisma.category.create({
       data: {
         ...categoryData,
         subCategories: subCategories
           ? {
-              create: subCategories
+              create: subCategories,
             }
           : undefined,
       },
-
       include: {
         subCategories: {
           select: {
@@ -30,10 +35,17 @@ export class CategoriesService {
         },
       },
     });
+    return {
+      data: category,
+      message: 'Categoría agregada correctamente',
+      success: true,
+    };
   }
   async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
     return paginate(this.prisma.category, paginationDto, {
-      include: {
+      select: {
+        id: true,
+        name: true,
         subCategories: {
           select: {
             id: true,
@@ -49,8 +61,15 @@ export class CategoriesService {
   async findOne(id: number) {
     const category = await this.prisma.category.findUnique({
       where: { id },
-      include: {
-        subCategories: true,
+      select: {
+        id: true,
+        name: true,
+        subCategories: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
     if (!category) {
