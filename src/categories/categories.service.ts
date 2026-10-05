@@ -2,6 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
+import { PaginationDto } from '../common/dto/pagination.dto.js';
+import { ApiListResponse } from '../common/interfaces/api-response.interface.js';
+import { paginate } from '../common/utils/paginate.utils.js';
 
 @Injectable()
 export class CategoriesService {
@@ -11,17 +14,32 @@ export class CategoriesService {
     return this.prisma.category.create({
       data: {
         ...categoryData,
-        subCategories: subCategories ? { create: subCategories } : undefined,
+        subCategories: subCategories
+          ? {
+              create: subCategories
+            }
+          : undefined,
       },
+
       include: {
-        subCategories: true,
+        subCategories: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
   }
-  async findAll() {
-    return this.prisma.category.findMany({
+  async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
+    return paginate(this.prisma.category, paginationDto, {
       include: {
-        subCategories: true,
+        subCategories: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: {
         name: 'asc',
