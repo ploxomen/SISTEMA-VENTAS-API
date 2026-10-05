@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { DocumentType } from '../../generated/prisma/enums.js';
 
 export class CreateUserDto {
   @IsEnum(DocumentType, {

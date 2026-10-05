@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto.js';
+import { StatusUser } from '../generated/prisma/enums.js';
 
 @Injectable()
 export class UsersService {
@@ -68,5 +69,5 @@ export class UsersService {
     });
     const { password, ...result } = user;
     return result;
-  }
+  } 
 }
