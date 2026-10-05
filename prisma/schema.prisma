@@ -60,11 +60,10 @@ model Role {
   id    Int     @id @default(autoincrement())
   name String
   icon String?
-  roleGroup Int?
+  description String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userRoles   UserRole[]
-  @@index([roleGroup])
   @@map("roles")
 }
 model UserRole {

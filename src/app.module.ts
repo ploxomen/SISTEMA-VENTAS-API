@@ -7,6 +7,7 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { UsersModule } from './users/users.module.js';
 import { BrandsModule } from './brands/brands.module.js';
+import { RolesModule } from './roles/roles.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -31,6 +32,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     UsersModule,
     UsersModule,
     BrandsModule,
+    RolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
