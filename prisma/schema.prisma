@@ -83,3 +83,22 @@ model Brand {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model ModuleGroup {
+  id Int  @id @default(autoincrement())
+  name String
+  description String?
+  icon String
+  modules Module[]
+  @@map("module_group")
+}
+
+model Module {
+  id Int  @id @default(autoincrement())
+  name String
+  description String?
+  icon String
+  url String
+  moduleGroupId Int?
+  moduleGroup   ModuleGroup? @relation(fields: [moduleGroupId], references: [id], onDelete: Cascade)
+}
