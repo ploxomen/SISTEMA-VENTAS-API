@@ -5,20 +5,49 @@ import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly prisma : PrismaService) {}
-  create(createRoleDto: CreateRoleDto) {
-    return 'This action adds a new role';
+  constructor(private readonly prisma: PrismaService) {}
+  async create(createRoleDto: CreateRoleDto) {
+    const { modules, ...roleData } = createRoleDto;
+    return this.prisma.role.create({
+      data: {
+        ...roleData,
+        moduleRol: {
+          create: modules.map((moduleId) => ({
+            module: {
+              connect: { id: moduleId },
+            },
+          })),
+        },
+      }
+    });
   }
 
   async findAll() {
-    return this.prisma.role.findMany({
-      select : {
-        id : true,
-        name : true,
-        icon : true,
-        description : true
-      }
-    })
+    const roles = await this.prisma.role.findMany({
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        description: true,
+        moduleRol: {
+          select: {
+            module: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      icon: role.icon,
+      description: role.description,
+      modules: role.moduleRol.map((mr) => mr.module),
+    }));
   }
 
   findOne(id: number) {

@@ -7,7 +7,6 @@ import { UpdateModuleDto } from './dto/update-module.dto.js';
 export class ModulesController {
   constructor(private readonly modulesService: ModulesService) {}
 
-
   @Get()
   findAll() {
     return this.modulesService.findAll();

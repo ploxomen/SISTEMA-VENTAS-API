@@ -8,8 +8,8 @@ export class ModulesService {
   
   constructor(private readonly prisma : PrismaService){}
 
-  findAll() {
-    return this.prisma.module.findMany({
+  async findAll() {
+    return await this.prisma.module.findMany({
       select : {
         id: true,
         name : true,

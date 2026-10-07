@@ -64,11 +64,13 @@ model Role {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userRoles   UserRole[]
+  moduleRol ModuleRol[]
   @@map("roles")
 }
 model UserRole {
   userId  Int
   roleId  Int
+  isActive Boolean @default(false)
   user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role  Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -82,6 +84,7 @@ model Brand {
   name String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@map("brand")
 }
 
 model ModuleGroup {
@@ -90,6 +93,8 @@ model ModuleGroup {
   description String?
   icon String
   modules Module[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
   @@map("module_group")
 }
 
@@ -101,4 +106,19 @@ model Module {
   url String
   moduleGroupId Int?
   moduleGroup   ModuleGroup? @relation(fields: [moduleGroupId], references: [id], onDelete: Cascade)
+  moduleRol ModuleRol[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+  @@map("module")
+}
+
+model ModuleRol {
+  id Int @id @default(autoincrement())
+  moduleId Int
+  rolId Int
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  rol Role @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("module_rol")
 }
