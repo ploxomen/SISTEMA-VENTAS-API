@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto.js';
 import { UpdateRoleDto } from './dto/update-role.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -18,7 +18,7 @@ export class RolesService {
             },
           })),
         },
-      }
+      },
     });
   }
 
@@ -50,15 +50,48 @@ export class RolesService {
     }));
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} role`;
+  async findOne(id: number) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        description: true,
+        moduleRol: {
+          select: {
+            module: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!role) {
+      throw new NotFoundException(`Rol no encontrado con el id ${id}`);
+    }
+    return { ...role, modules: role.moduleRol.map((mr) => mr.module) };
   }
 
   update(id: number, updateRoleDto: UpdateRoleDto) {
     return `This action updates a #${id} role`;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} role`;
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prisma.role.delete({
+      where: { id },
+      include: {
+        moduleRol: true,
+        userRoles: true,
+      },
+    });
+    return {
+      message: 'Rol eliminado correctamente',
+      success: true,
+    };
   }
 }
