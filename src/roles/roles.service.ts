@@ -84,6 +84,14 @@ export class RolesService {
 
   async update(id: number, updateRoleDto: UpdateRoleDto) {
     await this.findOne(id);
+    await this.prisma.role.update({
+      where : {id},
+      data: {
+        name : updateRoleDto.name,
+        icon : updateRoleDto.icon,
+        description : updateRoleDto.description
+      }
+    })
     return this.syncModules(id, updateRoleDto.modules!);
   }
 
