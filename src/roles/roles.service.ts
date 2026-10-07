@@ -73,11 +73,18 @@ export class RolesService {
     if (!role) {
       throw new NotFoundException(`Rol no encontrado con el id ${id}`);
     }
-    return { ...role, modules: role.moduleRol.map((mr) => mr.module) };
+    return {
+      id: role.id,
+      name: role.name,
+      icon: role.icon,
+      description: role.description,
+      modules: role.moduleRol.map((mr) => mr.module.id),
+    };
   }
 
-  update(id: number, updateRoleDto: UpdateRoleDto) {
-    return `This action updates a #${id} role`;
+  async update(id: number, updateRoleDto: UpdateRoleDto) {
+    await this.findOne(id);
+    return this.syncModules(id, updateRoleDto.modules!);
   }
 
   async remove(id: number) {
@@ -94,4 +101,57 @@ export class RolesService {
       success: true,
     };
   }
+  async syncModules(roleId: number, moduleIds: number[]) {
+    return this.prisma.$transaction(async (tx) => {
+        // IDs únicos
+        const newIds = [...new Set(moduleIds)];
+        // Relaciones actuales
+        const current = await tx.moduleRol.findMany({
+            where: {
+                rolId: roleId,
+            },
+            select: {
+                moduleId: true,
+            },
+        });
+        const currentIds = current.map((item) => item.moduleId);
+        // Lo que debemos eliminar
+        const idsToDelete = currentIds.filter(
+            (id) => !newIds.includes(id),
+        );
+        // Lo que debemos agregar
+        const idsToCreate = newIds.filter(
+            (id) => !currentIds.includes(id),
+        );
+        // DELETE solamente los que ya no existen
+        if (idsToDelete.length > 0) {
+            await tx.moduleRol.deleteMany({
+                where: {
+                    rolId: roleId,
+                    moduleId: {
+                        in: idsToDelete,
+                    },
+                },
+            });
+        }
+        // INSERT solamente los nuevos
+        if (idsToCreate.length > 0) {
+            await tx.moduleRol.createMany({
+                data: idsToCreate.map((moduleId) => ({
+                    rolId: roleId,
+                    moduleId,
+                })),
+                skipDuplicates: true,
+            });
+        }
+        return tx.moduleRol.findMany({
+            where: {
+                rolId: roleId,
+            },
+            include: {
+                module: true,
+            },
+        });
+    });
+}
 }
