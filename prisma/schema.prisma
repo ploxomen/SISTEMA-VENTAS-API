@@ -53,6 +53,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userRoles   UserRole[]
+  refreshTokens RefreshToken[]
   @@map("users")
 }
 
@@ -121,4 +122,15 @@ model ModuleRol {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@map("module_rol")
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  tokenHash   String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  @@index([userId])
 }

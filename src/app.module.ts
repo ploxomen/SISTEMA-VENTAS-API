@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module.js';
 import { BrandsModule } from './brands/brands.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { ModulesModule } from './modules/modules.module.js';
+import { AuthModule } from './auth/auth.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -17,7 +18,6 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
-        '.env.development',
         '.env',
       ],
     }),
@@ -35,6 +35,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     BrandsModule,
     RolesModule,
     ModulesModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
