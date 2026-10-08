@@ -471,17 +471,18 @@ El sistema implementa un esquema **stateless de doble token** (*access token* + 
 
 | Token | Contenido | Vida útil | Transporte / almacenamiento | Secreto |
 |---|---|---|---|---|
-| **Access token** | `sub`, `email`, nombres, `roles[]` (con rol activo), `type: 'access'` | Corta (`JWT_ACCESS_EXPIRES_IN`, recomendado 15 min) | Cuerpo de la respuesta → memoria del cliente → cabecera `Authorization: Bearer` | `JWT_ACCESS_SECRET` |
-| **Refresh token** | `sub`, `type: 'refresh'`, `jti` | Larga (`JWT_REFRESH_EXPIRES_IN`, 7 días) | Cookie `HttpOnly`; en BD solo su hash | `JWT_REFRESH_SECRET` (distinto) |
+| **Access token** | `sub`, `email`, nombres, `type: 'access'` (sin roles ni permisos: se consultan en BD) | Corta (`JWT_ACCESS_EXPIRES_IN`, recomendado 15 min) | Cuerpo de la respuesta → memoria del cliente → cabecera `Authorization: Bearer` | `JWT_ACCESS_SECRET` |
+| **Refresh token** | `sub`, `type: 'refresh'`, `jti` | Larga (`JWT_REFRESH_EXPIRES_IN`, p. ej. 7 días) | Cookie `HttpOnly`; en BD solo su hash | `JWT_REFRESH_SECRET` (distinto) |
 
 **Razones por las que el flujo es seguro**
 
 1. **Separación de secretos:** un *access token* no puede usarse como *refresh token* ni viceversa (secretos y claim `type` distintos).
 2. **Ventana de exposición reducida:** si un *access token* se filtra, caduca en minutos.
 3. **Resistencia a XSS:** el *refresh token*, que es la credencial de larga duración, reside en una cookie `HttpOnly` inaccesible desde JavaScript.
-4. **Resistencia a CSRF:** la cookie usa `SameSite=Lax` y las operaciones protegidas exigen la cabecera `Authorization`, que un sitio de terceros no puede adjuntar. El endpoint de refresco aplica además verificación de `Origin`.
+4. **Resistencia a CSRF:** la cookie usa `SameSite=Lax` y las operaciones protegidas exigen la cabecera `Authorization`, que un sitio de terceros no puede adjuntar. Además, la cookie solo se envía a las rutas `/auth` (`Path=/auth`).
 5. **Revocabilidad:** al persistir el hash del *refresh token* con `expiresAt` y `revokedAt`, el servidor puede invalidar sesiones (logout, cambio de contraseña, cuenta deshabilitada), algo que un JWT puro no permite.
-6. **Denegación por defecto:** el `AuthGuard` global protege toda ruta salvo las marcadas explícitamente con `@Public()`.
+6. **Permisos siempre vigentes:** el JWT no transporta roles; los roles, el rol activo y los módulos se obtienen de la BD (`GET /auth/session` y `ModuleAccessGuard`), por lo que un cambio de permisos no espera a que expire el token.
+7. **Denegación por defecto:** el `AuthGuard` global protege toda ruta salvo las marcadas explícitamente con `@Public()`.
 
 **Diagrama de secuencia del flujo**
 
@@ -500,11 +501,14 @@ sequenceDiagram
     API->>S: login(dto)
     S->>DB: findUnique(email)
     S->>S: bcrypt.compare(password, hash)
-    S->>DB: getUserRoles(userId) [transacción]
     S->>S: firmar accessToken (15 min) y refreshToken (7 d)
     S->>DB: INSERT RefreshToken(tokenHash, expiresAt)
-    S-->>API: { accessToken, refreshToken, user }
-    API-->>FE: 200 {accessToken, user} + Set-Cookie: refresh_token (HttpOnly)
+    S-->>API: { accessToken, refreshToken, refreshExpiresAt }
+    API-->>FE: 200 {accessToken} + Set-Cookie: refresh_token (HttpOnly)
+    FE->>API: GET /auth/session (Authorization: Bearer)
+    API->>DB: getUserRoles(userId) [activa el primer rol si no hay ninguno]
+    API->>DB: getModules(rol activo) agrupados por ModuleGroup
+    API-->>FE: 200 {roles, modules}
     FE->>API: GET /recurso (Authorization: Bearer accessToken)
     API->>API: AuthGuard verifica firma y expiración
     API->>API: ModuleAccessGuard verifica rol activo vs. módulo
@@ -535,9 +539,9 @@ sequenceDiagram
 2. Al enviar, se realiza `POST /auth/login` con `credentials: 'include'` para recibir la cookie `refresh_token`.
 3. Ante credenciales inválidas, la API responde **401 "Credenciales incorrectas"** y el formulario muestra ese mensaje genérico, sin revelar si el correo existe.
    `[Insertar captura 2: mensaje de credenciales incorrectas]`
-4. Ante éxito (200), el *access token* se guarda **en memoria** (estado de la aplicación), se decodifica la lista `roles[]` y se redirige al panel principal.
+4. Ante éxito (200), el *access token* se guarda **en memoria** (estado de la aplicación) y se invoca `GET /auth/session`, que devuelve los roles del usuario (`roles[]`, con el rol activo marcado) y los módulos del rol activo agrupados por `ModuleGroup`; con ello se redirige al panel principal.
 5. Si el usuario tiene estado `RESTORE` (alta reciente con contraseña inicial), se le redirige obligatoriamente a la pantalla de cambio de contraseña.
-6. Si el usuario posee varios roles, se muestra un selector de rol; el menú lateral se construye con los módulos (`ModuleGroup → Module`) asociados al **rol activo**.
+6. El menú lateral se construye con la lista `modules` de `/auth/session` (`ModuleGroup → Module`), es decir, con los módulos del **rol activo**. Si el usuario posee varios roles, se muestran en un selector.
    `[Insertar captura 3: panel principal con menú filtrado por rol]`
 7. En la pestaña *Network* de las herramientas del navegador puede evidenciarse la cabecera `Set-Cookie: refresh_token=...; HttpOnly; SameSite=Lax; Secure` y que `document.cookie` **no** expone dicho valor.
    `[Insertar captura 4: cookie HttpOnly en DevTools]`
@@ -583,8 +587,8 @@ erDiagram
     }
 ```
 
-- Un **usuario** puede tener **múltiples roles** (`user_roles`), pero opera con **un único rol activo** (`isActive = true`). Si ninguno está activo, `getUserRoles()` activa el primero de forma transaccional.
-- Cada **rol** concede acceso a un conjunto de **módulos** (`module_rol`), agrupados en `module_group` para construir el menú.
+- Un **usuario** puede tener **múltiples roles** (`user_roles`), pero opera con **un único rol activo** (`isActive = true`). Si ninguno está activo, `getUserRoles()` (invocado por `GET /auth/session`) activa el primero de forma transaccional. Por ello el cliente debe llamar a `/auth/session` tras el login: hasta entonces el usuario sin rol activo no supera `ModuleAccessGuard`.
+- Cada **rol** concede acceso a un conjunto de **módulos** (`module_rol`), agrupados en `module_group`. `GET /auth/session` los devuelve agrupados para construir el menú.
 - La **autorización** se evalúa en dos niveles:
   1. **Autenticación (`AuthGuard`, global):** verifica firma y vigencia del JWT y adjunta el *payload* a `request.user`.
   2. **Autorización (`ModuleAccessGuard`):** cada controlador declara el módulo que protege con `@RequireModule(AppModules.USERS)`. El guard consulta en BD si el **rol activo** del usuario tiene ese módulo asignado. Consultar la BD (y no solo el JWT) garantiza que la revocación de un permiso surta efecto inmediato. Este principio aplica **mínimo privilegio** (NIST AC-6) y **denegación por defecto**.
@@ -594,14 +598,15 @@ erDiagram
 | Evento | Acción del servidor |
 |---|---|
 | Login | Emite *access token* (15 min) y *refresh token* (7 días, con `jti` único); guarda `sha256(refreshToken)` |
+| Carga de sesión | `GET /auth/session` devuelve roles y módulos del rol activo (activa el primer rol si no hay ninguno) |
 | Petición autenticada | `AuthGuard` valida el *access token* recibido en `Authorization: Bearer` |
 | Expiración del *access token* | El cliente invoca `POST /auth/refresh`; la cookie viaja automáticamente |
 | Refresco | Se valida firma, `type`, existencia del hash, `revokedAt IS NULL` y `expiresAt > now`; se **revoca** el token usado y se emite un par nuevo (**rotación**) |
-| Reutilización de un token revocado | Se interpreta como robo de token: se revocan **todas** las sesiones del usuario y se registra un evento de auditoría |
+| Reutilización de un token revocado | Se interpreta como robo de token: se revocan **todas** las sesiones del usuario |
 | Logout | Se marca `revokedAt` y se elimina la cookie (`clearCookie`) |
-| Cambio de contraseña / deshabilitar cuenta | Revocación masiva de los *refresh tokens* del usuario |
+| Cuenta deshabilitada | El siguiente refresco falla y revoca todas sus sesiones (`revokeAll`) |
 
-**Atributos de la cookie:** `HttpOnly`, `Secure` (producción), `SameSite=Lax`, `Max-Age` de 7 días y `Path=/auth` (restringe el envío de la cookie a los endpoints de autenticación).
+**Atributos de la cookie:** `HttpOnly`, `Secure` (producción), `SameSite=Lax`, expiración igual a la del propio JWT y `Path=/auth` (restringe el envío de la cookie a los endpoints de autenticación).
 
 ### 3.5 Código fuente
 
@@ -611,19 +616,13 @@ erDiagram
 
 ```typescript
 // src/auth/auth.controller.ts
-import { Body, Controller, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
-import type { CookieOptions, Request, Response } from 'express';
-import { AuthService } from './auth.service.js';
-import { LoginDto } from './dto/login.dto.js';
-import { Public } from './decorators/public.decorator.js';
-
 const REFRESH_COOKIE = 'refresh_token';
 const refreshCookieOptions: CookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
+  // La cookie solo viaja a los endpoints de autenticación.
   path: '/auth',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
 @Controller('auth')
@@ -633,29 +632,61 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(200)
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const { accessToken, refreshToken, user } = await this.authService.login(dto);
-    res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions);
-    return { accessToken, user };
+  async login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.login(loginDto);
+    this.setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+    return {
+      accessToken: result.accessToken,
+    };
   }
 
   @Post('refresh')
   @Public()
   @HttpCode(200)
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = req.cookies?.[REFRESH_COOKIE];
-    if (!token) throw new UnauthorizedException('Sesión no válida');
-    const tokens = await this.authService.refresh(token);
-    res.cookie(REFRESH_COOKIE, tokens.refreshToken, refreshCookieOptions);
-    return { accessToken: tokens.accessToken };
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const token: string | undefined = request.cookies?.[REFRESH_COOKIE];
+    if (!token) {
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    try {
+      const result = await this.authService.refresh(token);
+      this.setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+      return { accessToken: result.accessToken };
+    } catch (error) {
+      response.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+      throw error;
+    }
   }
 
   @Post('logout')
   @Public()
   @HttpCode(204)
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    await this.authService.logout(req.cookies?.[REFRESH_COOKIE]);
-    res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.authService.logout(request.cookies?.[REFRESH_COOKIE]);
+    response.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+  }
+
+  @Get('session')
+  async roles(@CurrentUser('sub') userId: number) {
+    const roles = await this.authService.getUserRoles(userId);
+    const roleActive = roles.find((r) => r.isActive) || null;
+    const modules = roleActive
+      ? await this.authService.getModules(roleActive.idRol)
+      : [];
+    return { roles, modules };
+  }
+
+  private setRefreshCookie(response: Response, token: string, expires: Date) {
+    response.cookie(REFRESH_COOKIE, token, { ...refreshCookieOptions, expires });
   }
 }
 ```
@@ -664,116 +695,113 @@ export class AuthController {
 
 ```typescript
 // src/auth/auth.service.ts (extracto)
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { createHash, randomUUID } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service.js';
-import { LoginDto } from './dto/login.dto.js';
 
-// Hash ficticio (generado al iniciar) para igualar el tiempo de respuesta cuando el email no existe.
-const DUMMY_HASH = bcrypt.hashSync(randomUUID(), 12);
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+// Hash ficticio para igualar el tiempo de respuesta cuando el email no existe.
+const DUMMY_HASH = bcrypt.hashSync(randomUUID(), 10);
+
+// El refresh token es un valor de alta entropía: basta un hash rápido.
+// (bcrypt solo procesa 72 bytes, que en un JWT son casi iguales entre tokens.)
+export const hashToken = (token: string) =>
+  createHash('sha256').update(token).digest('hex');
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
-    private readonly config: ConfigService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    @Inject(USERS_REPOSITORY)
+    private readonly usersRepository: UsersRepository,
   ) {}
 
-  async login({ email, password }: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    const passwordValid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
-
+  async login(loginDto: LoginDto) {
+    const user = await this.usersRepository.findByEmailWithCredentials(
+      loginDto.email,
+    );
+    const passwordValid = await bcrypt.compare(
+      loginDto.password,
+      user?.password ?? DUMMY_HASH,
+    );
     // Mensaje único: no revela si el email existe ni si la cuenta está deshabilitada.
-    if (!user || !passwordValid || user.status === 'DISABLED') {
+    if (!user || !passwordValid || user.status === StatusUser.DISABLED) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
-    return {
-      ...(await this.issueTokens(user.id)),
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
-    };
+    return this.issueTokens(user);
   }
 
   async refresh(token: string) {
-    const payload = await this.jwt
+    const payload = await this.jwtService
       .verifyAsync<{ sub: number; type: string }>(token, {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       })
       .catch(() => {
         throw new UnauthorizedException('Sesión no válida');
       });
-    if (payload.type !== 'refresh') throw new UnauthorizedException('Sesión no válida');
-
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('Sesión no válida');
+    }
     const stored = await this.prisma.refreshToken.findFirst({
-      where: { tokenHash: sha256(token), userId: payload.sub },
+      where: { tokenHash: hashToken(token), userId: payload.sub },
     });
     if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Sesión no válida');
     }
-    if (stored.revokedAt) {
+    // Revocación atómica: si otro proceso ya lo usó, count será 0.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (count === 0) {
       // Reutilización de un token ya rotado: posible robo. Se cierran todas las sesiones.
       await this.revokeAll(payload.sub);
       throw new UnauthorizedException('Sesión no válida');
     }
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
-    return this.issueTokens(payload.sub);
+    const user = await this.usersRepository.findById(payload.sub);
+    if (!user || user.status === StatusUser.DISABLED) {
+      await this.revokeAll(payload.sub);
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    return this.issueTokens(user);
   }
 
   async logout(token?: string) {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
     await this.prisma.refreshToken.updateMany({
-      where: { tokenHash: sha256(token), revokedAt: null },
+      where: { tokenHash: hashToken(token), revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
 
-  revokeAll(userId: number) {
-    return this.prisma.refreshToken.updateMany({
+  async revokeAll(userId: number) {
+    await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
 
-  private async issueTokens(userId: number) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const accessToken = await this.jwt.signAsync(
+  private async generateRefreshToken(userId: number) {
+    const refreshToken = await this.jwtService.signAsync(
+      { sub: userId, type: 'refresh', jti: randomUUID() },
       {
-        sub: user.id,
-        email: user.email,
-        fullName: `${user.lastName} ${user.firstName}`,
-        roles: await this.getUserRoles(user.id),
-        type: 'access',
-      },
-      {
-        secret: this.config.getOrThrow('JWT_ACCESS_SECRET'),
-        expiresIn: this.config.getOrThrow('JWT_ACCESS_EXPIRES_IN'),
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.getOrThrow<string>(
+          'JWT_REFRESH_EXPIRES_IN',
+        ) as StringValue,
       },
     );
-    const refreshToken = await this.jwt.signAsync(
-      { sub: user.id, type: 'refresh', jti: randomUUID() },
-      {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
-        expiresIn: this.config.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
-      },
-    );
+    // La expiración en BD (y en la cookie) se toma del propio JWT para que coincidan.
+    const { exp } = this.jwtService.decode<{ exp: number }>(refreshToken);
+    const refreshExpiresAt = new Date(exp * 1000);
     await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: sha256(refreshToken),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
+      data: { tokenHash: hashToken(refreshToken), userId, expiresAt: refreshExpiresAt },
     });
-    return { accessToken, refreshToken };
+    return { refreshToken, refreshExpiresAt };
   }
 
-  // getUserRoles(userId): ver implementación en src/auth/auth.service.ts
+  // issueTokens, generateAccessToken, getUserRoles y getModules:
+  // ver implementación completa en src/auth/auth.service.ts
 }
 ```
 
@@ -843,8 +871,9 @@ export class RolesController { /* ... */ }
 
 - **Repositorio del código fuente:** [Insertar enlace al repositorio aquí]
 - **Archivos clave:**
-  - `src/auth/auth.controller.ts` — endpoints de login, refresco y logout
-  - `src/auth/auth.service.ts` — emisión, rotación y revocación de tokens
+  - `src/auth/auth.controller.ts` — endpoints de login, refresco, logout y sesión (`/auth/session`)
+  - `src/auth/auth.service.ts` — emisión, rotación y revocación de tokens; roles y módulos del usuario
+  - `src/auth/module-access.guard.ts` y `src/auth/app-modules.ts` — autorización por módulo (RBAC)
   - `src/auth/auth.guard.ts` — guard global de autenticación JWT
   - `src/auth/decorators/public.decorator.ts` — excepción explícita a la denegación por defecto
   - `prisma/schema.prisma` — modelos `User`, `Role`, `UserRole`, `Module`, `ModuleRol`, `RefreshToken`
