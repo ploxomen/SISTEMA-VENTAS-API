@@ -1,11 +1,25 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto.js';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomUUID } from 'node:crypto';
 import { StringValue } from 'ms';
-import { ModuleGroup, User } from '../generated/prisma/client.js';
+import { StatusUser } from '../generated/prisma/enums.js';
+import {
+  USERS_REPOSITORY,
+  type UserEntity,
+  type UsersRepository,
+} from '../users/repositories/users.repository.js';
+
+// Hash ficticio para igualar el tiempo de respuesta cuando el email no existe.
+const DUMMY_HASH = bcrypt.hashSync(randomUUID(), 10);
+
+// El refresh token es un valor de alta entropía: basta un hash rápido.
+// (bcrypt solo procesa 72 bytes, que en un JWT son casi iguales entre tokens.)
+export const hashToken = (token: string) =>
+  createHash('sha256').update(token).digest('hex');
 
 interface ModuleList {
   idModule : number,
@@ -33,35 +47,90 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(USERS_REPOSITORY)
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   async login(loginDto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email },
-    });
-    if (!user) {
-      throw new UnauthorizedException('Credenciales incorrectas');
-    }
-    if (user.status === 'DISABLED') {
-      throw new UnauthorizedException('Usuario inactivo');
-    }
+    const user = await this.usersRepository.findByEmailWithCredentials(
+      loginDto.email,
+    );
     const passwordValid = await bcrypt.compare(
       loginDto.password,
-      user.password,
+      user?.password ?? DUMMY_HASH,
     );
-    if (!passwordValid) {
+    // Mensaje único: no revela si el email existe ni si la cuenta está deshabilitada.
+    if (!user || !passwordValid || user.status === StatusUser.DISABLED) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
-    const accessToken = await this.generateAccessToken(user);
-
-    const refreshToken = await this.generateRefreshToken(user.id);
-
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return this.issueTokens(user);
   }
-  private async generateAccessToken(user: User) {
+
+  async refresh(token: string) {
+    const payload = await this.jwtService
+      .verifyAsync<{ sub: number; type: string }>(token, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      })
+      .catch(() => {
+        throw new UnauthorizedException('Sesión no válida');
+      });
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    const stored = await this.prisma.refreshToken.findFirst({
+      where: { tokenHash: hashToken(token), userId: payload.sub },
+    });
+    if (!stored || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    // Revocación atómica: si otro proceso ya lo usó, count será 0.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (count === 0) {
+      // Reutilización de un token ya rotado: posible robo. Se cierran todas las sesiones.
+      await this.revokeAll(payload.sub);
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    const user = await this.usersRepository.findById(payload.sub);
+    if (!user || user.status === StatusUser.DISABLED) {
+      await this.revokeAll(payload.sub);
+      throw new UnauthorizedException('Sesión no válida');
+    }
+    return this.issueTokens(user);
+  }
+
+  async logout(token?: string) {
+    if (!token) {
+      return;
+    }
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: hashToken(token), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAll(userId: number) {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async issueTokens(
+    user: Pick<UserEntity, 'id' | 'email' | 'firstName' | 'lastName'>,
+  ) {
+    const accessToken = await this.generateAccessToken(user);
+    const { refreshToken, refreshExpiresAt } = await this.generateRefreshToken(
+      user.id,
+    );
+    return { accessToken, refreshToken, refreshExpiresAt };
+  }
+
+  private async generateAccessToken(
+    user: Pick<UserEntity, 'id' | 'email' | 'firstName' | 'lastName'>,
+  ) {
     const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
     const expiresIn = this.configService.getOrThrow<string>(
       'JWT_ACCESS_EXPIRES_IN',
@@ -88,26 +157,29 @@ export class AuthService {
     const expiresIn = this.configService.getOrThrow<string>(
       'JWT_REFRESH_EXPIRES_IN',
     ) as StringValue;
-    const token = await this.jwtService.signAsync(
+    const refreshToken = await this.jwtService.signAsync(
       {
         sub: userId,
         type: 'refresh',
+        jti: randomUUID(),
       },
       {
         secret,
         expiresIn,
       },
     );
-    const tokenHash = await bcrypt.hash(token, 10);
+    // La expiración en BD (y en la cookie) se toma del propio JWT para que coincidan.
+    const { exp } = this.jwtService.decode<{ exp: number }>(refreshToken);
+    const refreshExpiresAt = new Date(exp * 1000);
     await this.prisma.refreshToken.create({
       data: {
-        tokenHash,
+        tokenHash: hashToken(refreshToken),
         userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: refreshExpiresAt,
       },
     });
 
-    return token;
+    return { refreshToken, refreshExpiresAt };
   }
   async getModules(rolId: number) {
     const modules = await this.prisma.moduleRol.findMany({

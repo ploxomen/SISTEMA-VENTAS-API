@@ -6,6 +6,7 @@ export interface ActiveUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  type?: 'access' | 'refresh';
 }
 
 export const CurrentUser = createParamDecorator(
