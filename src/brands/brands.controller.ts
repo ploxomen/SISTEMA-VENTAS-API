@@ -3,8 +3,11 @@ import { BrandsService } from './brands.service.js';
 import { CreateBrandDto } from './dto/create-brand.dto.js';
 import { UpdateBrandDto } from './dto/update-brand.dto.js';
 import { PaginationDto } from '../common/dto/pagination.dto.js';
+import { RequireModule } from '../auth/decorators/require-module.decorator.js';
+import { AppModules } from '../auth/app-modules.js';
 
 @Controller('brands')
+@RequireModule(AppModules.BRANDS)
 export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
 

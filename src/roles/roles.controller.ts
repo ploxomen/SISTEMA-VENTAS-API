@@ -2,8 +2,11 @@ import { Controller, Get, Post, Body, Param, Delete, Put } from '@nestjs/common'
 import { RolesService } from './roles.service.js';
 import { CreateRoleDto } from './dto/create-role.dto.js';
 import { UpdateRoleDto } from './dto/update-role.dto.js';
+import { RequireModule } from '../auth/decorators/require-module.decorator.js';
+import { AppModules } from '../auth/app-modules.js';
 
 @Controller('roles')
+@RequireModule(AppModules.ROLES)
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 

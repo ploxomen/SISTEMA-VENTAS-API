@@ -1,17 +1,24 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { StatusUser } from '../generated/prisma/enums.js';
+import {
+  USERS_REPOSITORY,
+  type UsersRepository,
+} from './repositories/users.repository.js';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USERS_REPOSITORY)
+    private readonly usersRepository: UsersRepository,
+  ) {}
   async passwordHash(pass: string) {
     return await bcrypt.hash(pass, 10);
   }
@@ -20,60 +27,27 @@ export class UsersService {
       createUserDto.email,
       createUserDto.documentNumber,
     );
-    const password = await this.passwordHash(createUserDto.documentNumber);
     const { roleIds, ...formData } = createUserDto;
-    const user = await this.prisma.user.create({
-      data: {
-        ...formData,
-        password,
-        status: StatusUser.RESTORE,
-        userRoles: {
-          create: roleIds.map((roleId) => ({
-            role: {
-              connect: { id: roleId },
-            },
-          })),
-        },
-      },
-      include: {
-        userRoles: {
-          select: {
-            roleId: true
-          },
-        },
-      },
+    return this.usersRepository.create({
+      ...formData,
+      passwordHash: await this.passwordHash(createUserDto.documentNumber),
+      status: StatusUser.RESTORE,
+      roleIds,
     });
-    const { password: passDB, ...result } = user;
-    return result;
   }
   async findAll() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        documentType: true,
-        documentNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        address: true,
-        phone: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    return this.usersRepository.findAll();
   }
   async verifiUniqueNumberDocEmail(
     email: string,
     documentNumber: string,
     excludeUserId?: number,
   ) {
-    const existUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email }, { documentNumber }],
-        ...(excludeUserId ? { NOT: { id: excludeUserId } } : {}),
-      },
-      select: { email: true, documentNumber: true },
-    });
+    const existUser = await this.usersRepository.findConflict(
+      email,
+      documentNumber,
+      excludeUserId,
+    );
     if (existUser && existUser.email === email) {
       throw new ConflictException('El correo electrónico ya está registrado');
     } else if (existUser && existUser.documentNumber === documentNumber) {
@@ -81,34 +55,22 @@ export class UsersService {
     }
   }
   async findOne(id: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        documentType: true,
-        documentNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        address: true,
-        phone: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
+    const user = await this.usersRepository.findById(id);
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
     return user;
   }
   async update(id: number, updateUserDto: UpdateUserDto) {
-    await this.findOne(id);
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: updateUserDto,
-    });
-    const { password, ...result } = user;
-    return result;
+    const current = await this.findOne(id);
+    const { roleIds: _roleIds, ...data } = updateUserDto;
+    if (data.email || data.documentNumber) {
+      await this.verifiUniqueNumberDocEmail(
+        data.email ?? current.email,
+        data.documentNumber ?? current.documentNumber,
+        id,
+      );
+    }
+    return this.usersRepository.update(id, data);
   }
 }

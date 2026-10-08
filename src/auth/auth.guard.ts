@@ -9,9 +9,10 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator.js';
+import type { ActiveUser } from './decorators/current-user.decorator.js';
 
 export interface RequestWithUser extends Request {
-  user?: any; // o pon tu tipo de payload: ActiveUser
+  user?: ActiveUser;
 }
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -35,16 +36,20 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException('Token de acceso no proporcionado');
     }
+    let payload: ActiveUser;
     try {
       // 2. Verificar la firma y vigencia del JWT
-      const payload = await this.jwtService.verifyAsync(token, {
+      payload = await this.jwtService.verifyAsync<ActiveUser>(token, {
         secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       });
-      // 3. Adjuntar el payload al objeto request
-      request['user'] = payload;
     } catch {
       throw new UnauthorizedException('Token inválido o expirado');
     }
+    if (payload.type !== 'access') {
+      throw new UnauthorizedException('Token inválido o expirado');
+    }
+    // 3. Adjuntar el payload al objeto request
+    request.user = payload;
     return true;
   }
   private extractTokenFromHeaderOrCookie(request: Request): string | undefined {

@@ -3,8 +3,11 @@ import { CategoriesService } from './categories.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { PaginationDto } from '../common/dto/pagination.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
+import { RequireModule } from '../auth/decorators/require-module.decorator.js';
+import { AppModules } from '../auth/app-modules.js';
 
 @Controller('categories')
+@RequireModule(AppModules.CATEGORIES)
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
   @Post()
