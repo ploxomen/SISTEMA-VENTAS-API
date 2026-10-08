@@ -49,7 +49,6 @@ export class AuthService {
   }
   private async generateAccessToken(user: User) {
     const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
-
     const expiresIn = this.configService.getOrThrow<string>(
       'JWT_ACCESS_EXPIRES_IN',
     ) as StringValue;
@@ -59,7 +58,8 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        fullName: user.lastName + " " + user.firstName, 
+        fullName: user.lastName + ' ' + user.firstName,
+        roles: await this.getUserRoles(user.id),
         type: 'access',
       },
       {
@@ -95,5 +95,55 @@ export class AuthService {
     });
 
     return token;
+  }
+  async getUserRoles(userId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Obtener todos los roles asociados al usuario
+      const userRoles = await tx.userRole.findMany({
+        where: { userId },
+        include: {
+          role: true,
+        },
+        orderBy: {
+          createdAt: 'asc', // Ordenar para garantizar cuál es el "primer" rol
+        },
+      });
+
+      // Si el usuario no tiene ningún rol asignado
+      if (userRoles.length === 0) {
+        return [];
+      }
+
+      // 2. Verificar si hay al menos un rol activo
+      const hasActiveRole = userRoles.some((ur) => ur.isActive);
+
+      // 3. Si no hay ningún rol activo, activar el primero en la base de datos
+      if (!hasActiveRole) {
+        const firstRole = userRoles[0];
+
+        await tx.userRole.update({
+          where: {
+            userId_roleId: {
+              userId: firstRole.userId,
+              roleId: firstRole.roleId,
+            },
+          },
+          data: {
+            isActive: true,
+          },
+        });
+
+        // Actualizar el estado en memoria para retornar la respuesta correcta sin re-consultar
+        firstRole.isActive = true;
+      }
+
+      // 4. Mapear y retornar la estructura solicitada
+      return userRoles.map((ur) => ({
+        idRol: ur.role.id,
+        nombreRol: ur.role.name,
+        iconRol: ur.role.icon,
+        isActive: ur.isActive,
+      }));
+    });
   }
 }

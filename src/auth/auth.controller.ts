@@ -1,18 +1,16 @@
 import {
   Controller,
-  Get,
   Post,
   Body,
-  Patch,
-  Param,
-  Delete,
   Res,
   HttpCode,
+  Get,
 } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import type { Response } from 'express';
 import { Public } from './decorators/public.decorator.js';
+import { CurrentUser } from './decorators/current-user.decorator.js';
 
 @Controller('auth')
 export class AuthController {
@@ -37,5 +35,10 @@ export class AuthController {
       accessToken: result.accessToken,
       user: result.user,
     };
+  }
+
+  @Get('my-rol')
+  async roles(@CurrentUser('sub') userId: number) {
+    
   }
 }
