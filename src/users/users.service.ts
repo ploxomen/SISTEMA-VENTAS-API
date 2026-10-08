@@ -8,6 +8,9 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { StatusUser } from '../generated/prisma/enums.js';
+import { ApiListResponse } from '../common/interfaces/api-response.interface.js';
+import { PaginationDto } from '../common/dto/pagination.dto.js';
+import { paginate } from '../common/utils/paginate.utils.js';
 
 @Injectable()
 export class UsersService {
@@ -26,7 +29,7 @@ export class UsersService {
       data: {
         ...formData,
         password,
-        status: StatusUser.RESTORE,
+        status: StatusUser.ONLINE,
         userRoles: {
           create: roleIds.map((roleId) => ({
             role: {
@@ -38,7 +41,7 @@ export class UsersService {
       include: {
         userRoles: {
           select: {
-            roleId: true
+            roleId: true,
           },
         },
       },
@@ -46,8 +49,8 @@ export class UsersService {
     const { password: passDB, ...result } = user;
     return result;
   }
-  async findAll() {
-    return this.prisma.user.findMany({
+  async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
+    return paginate(this.prisma.user, paginationDto, {
       select: {
         id: true,
         documentType: true,
@@ -88,27 +91,54 @@ export class UsersService {
         documentType: true,
         documentNumber: true,
         firstName: true,
+        dateOfBirth: true,
         lastName: true,
         email: true,
         address: true,
         phone: true,
-        status: true,
-        createdAt: true,
+        userRoles: true,
       },
     });
-
     if (!user) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-    return user;
+    const { userRoles, ...userData } = user;
+
+    return {
+      ...userData,
+      roleIds: userRoles.map(({ roleId }) => roleId),
+    };
   }
   async update(id: number, updateUserDto: UpdateUserDto) {
     await this.findOne(id);
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: updateUserDto,
+    const { roleIds, ...userData } = updateUserDto;
+    return this.prisma.$transaction(async (tx) => {
+      const user = await this.prisma.user.update({
+        where: { id },
+        data: {
+          ...userData,
+        },
+      });
+      const uniqueRolesId = [...new Set(roleIds)];
+      await tx.userRole.deleteMany({
+        where: {
+          userId: id,
+          ...(uniqueRolesId.length > 0
+            ? { roleId: { notIn: uniqueRolesId } }
+            : {}),
+        },
+      });
+      if (uniqueRolesId.length > 0) {
+        await tx.userRole.createMany({
+          data: uniqueRolesId.map((roleId) => ({
+            userId: id,
+            roleId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      const { password, ...result } = user;
+      return result;
     });
-    const { password, ...result } = user;
-    return result;
   }
 }
