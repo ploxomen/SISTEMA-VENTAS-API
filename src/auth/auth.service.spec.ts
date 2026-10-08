@@ -75,7 +75,7 @@ describe('AuthService', () => {
           expiresAt: result.refreshExpiresAt,
         },
       });
-      expect(result.user).not.toHaveProperty('password');
+      expect(result).not.toHaveProperty('user');
     });
 
     it.each([

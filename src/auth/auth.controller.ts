@@ -38,7 +38,6 @@ export class AuthController {
     this.setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
     return {
       accessToken: result.accessToken,
-      user: result.user,
     };
   }
 
@@ -74,9 +73,15 @@ export class AuthController {
     response.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
   }
 
-  @Get('my-rol')
+  @Get('session')
   async roles(@CurrentUser('sub') userId: number) {
-
+    const roles =  await this.authService.getUserRoles(userId);
+    const roleActive = roles.find(r => r.isActive) || null;
+    const modules = roleActive ? await this.authService.getModules(roleActive.idRol) : [];
+    return {
+      roles,
+      modules
+    }
   }
 
   private setRefreshCookie(response: Response, token: string, expires: Date) {

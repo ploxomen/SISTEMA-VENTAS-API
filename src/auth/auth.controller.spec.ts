@@ -15,7 +15,6 @@ describe('AuthController', () => {
         accessToken: 'access',
         refreshToken: 'refresh',
         refreshExpiresAt: expires,
-        user: { id: 1 },
       }),
       refresh: vi.fn().mockResolvedValue({
         accessToken: 'access-2',
@@ -37,7 +36,7 @@ describe('AuthController', () => {
       response as unknown as Response,
     );
 
-    expect(body).toEqual({ accessToken: 'access', user: { id: 1 } });
+    expect(body).toEqual({ accessToken: 'access' });
     expect(response.cookie).toHaveBeenCalledWith(
       'refresh_token',
       'refresh',
