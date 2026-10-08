@@ -33,12 +33,17 @@ export class AuthController {
     });
     return {
       accessToken: result.accessToken,
-      user: result.user,
     };
   }
 
-  @Get('my-rol')
+  @Get('session')
   async roles(@CurrentUser('sub') userId: number) {
-    
+    const roles =  await this.authService.getUserRoles(userId);
+    const roleActive = roles.find(r => r.isActive) || null;
+    const modules = roleActive ? await this.authService.getModules(roleActive.idRol) : [];
+    return {
+      roles,
+      modules
+    }
   }
 }

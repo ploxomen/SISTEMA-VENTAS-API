@@ -5,8 +5,28 @@ import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto.js';
 import * as bcrypt from 'bcrypt';
 import { StringValue } from 'ms';
-import { User } from '../generated/prisma/client.js';
+import { ModuleGroup, User } from '../generated/prisma/client.js';
 
+interface ModuleList {
+  idModule : number,
+  nameModule : string,
+  iconModule : string,
+  urlModule : string,
+  idGroup ?: number | null,
+  nameGroup ?: string | null,
+  iconGroup ?: string | null
+}
+interface GroupedModule {
+  idGroup: number;
+  nameGroup?: string;
+  iconGroup?: string;
+  modules: {
+    idModule: number;
+    nameModule: string;
+    iconModule: string;
+    urlModule: string;
+  }[];
+}
 @Injectable()
 export class AuthService {
   constructor(
@@ -39,12 +59,6 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
     };
   }
   private async generateAccessToken(user: User) {
@@ -59,7 +73,6 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         fullName: user.lastName + ' ' + user.firstName,
-        roles: await this.getUserRoles(user.id),
         type: 'access',
       },
       {
@@ -95,6 +108,58 @@ export class AuthService {
     });
 
     return token;
+  }
+  async getModules(rolId: number) {
+    const modules = await this.prisma.moduleRol.findMany({
+      where: { rolId },
+      include: {
+        module: {
+          include: {
+            moduleGroup: true,
+          },
+        },
+      },
+    });
+    const moduleData = modules.map((m) => ({
+      idModule: m.module.id,
+      nameModule: m.module.name,
+      iconModule: m.module.icon,
+      urlModule: m.module.url,
+      idGroup: m.module.moduleGroup?.id,
+      nameGroup: m.module.moduleGroup?.name,
+      iconGroup: m.module.moduleGroup?.icon,
+    }));
+    return this.groupedModules(moduleData);
+  }
+  private groupedModules(modules : Array<ModuleList>) : GroupedModule[] {
+    const groups = modules.reduce<Record<number, GroupedModule>>(
+    (groups, module) => {
+      const groupId = module.idGroup;
+      if (!groupId) {
+        return groups;
+      }
+      if (!groups[groupId]) {
+        groups[groupId] = {
+          idGroup: groupId,
+          nameGroup: module.nameGroup || "",
+          iconGroup: module.iconGroup || "",
+          modules: [],
+        };
+      }
+
+      groups[groupId].modules.push({
+        idModule: module.idModule,
+        nameModule: module.nameModule,
+        iconModule: module.iconModule,
+        urlModule: module.urlModule,
+      });
+
+      return groups;
+    },
+    {},
+  );
+
+  return Object.values(groups);
   }
   async getUserRoles(userId: number) {
     return this.prisma.$transaction(async (tx) => {
