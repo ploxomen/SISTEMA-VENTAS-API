@@ -12,12 +12,14 @@ import {
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import type { Response } from 'express';
+import { Public } from './decorators/public.decorator.js';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @Public()
   @HttpCode(200)
   async login(
     @Body() loginDto: LoginDto,

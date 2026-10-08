@@ -16,7 +16,6 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto) {
-    console.log(loginDto);
     const user = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
     });
@@ -57,10 +56,11 @@ export class AuthService {
     return this.jwtService.signAsync(
       {
         sub: user.id,
-        type: 'access',
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        fullName: user.lastName + " " + user.firstName, 
+        type: 'access',
       },
       {
         secret,
