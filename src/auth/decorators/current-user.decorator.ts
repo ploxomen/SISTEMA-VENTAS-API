@@ -8,7 +8,7 @@ export interface ActiveUser {
   lastName?: string;
   type?: 'access' | 'refresh';
 }
-
+//mi decorador
 export const CurrentUser = createParamDecorator(
   (data: keyof ActiveUser | undefined, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
