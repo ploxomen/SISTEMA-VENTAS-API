@@ -24,6 +24,7 @@ model Category {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   subCategories SubCategory[]
+  products Product[]
   @@map("categories")
 }
 
@@ -34,6 +35,7 @@ model SubCategory {
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  products Product[]
   @@index([categoryId])
   @@map("sub_categories")
 }
@@ -133,4 +135,48 @@ model RefreshToken {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   @@index([userId])
+}
+
+model Product {
+  id  Int @id @default(autoincrement())
+  name String
+  description String?
+  categoryId Int
+  category Category @relation(fields: [categoryId], references: [id])
+  subcategoryId Int
+  subcategory SubCategory @relation(fields: [subcategoryId], references: [id])
+  model String?
+  initialStock Int
+  minimunStock Int
+  purchasePrice Decimal @db.Decimal(10, 2)
+  salePrice Decimal @db.Decimal(10, 2)
+  wholesalePrice Decimal? @db.Decimal(10, 2)
+  hasExpiration Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  productLote ProductLote[]
+  productImg ProductImg[]
+  @@map("product")
+}
+model ProductImg {
+  id  Int @id @default(autoincrement())
+  productId Int
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url String
+  name String
+  isPrincipal Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("product_img")
+}
+model ProductLote {
+  id  Int @id @default(autoincrement())
+  productId Int
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lotNumber String
+  quantity Int
+  expirationDate DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("product_lote")
 }

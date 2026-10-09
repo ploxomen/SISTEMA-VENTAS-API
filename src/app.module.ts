@@ -10,6 +10,7 @@ import { BrandsModule } from './brands/brands.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { ModulesModule } from './modules/modules.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { ProductsModule } from './products/products.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -36,6 +37,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     RolesModule,
     ModulesModule,
     AuthModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
