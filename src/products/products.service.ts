@@ -15,28 +15,36 @@ export class ProductsService {
     imageFile: Express.Multer.File[],
   ) {
     const savedImages = await this.filesService.saveProductImages(imageFile);
-    const {lots, images, ...productData} = createProductDto;
+    const { lots, images, ...productData } = createProductDto;
+    console.log(images);
     try {
       // 2. Crear el producto y sus imágenes en Prisma.
       return await this.prisma.product.create({
         data: {
           ...productData,
           productImg: {
-            create: savedImages.map((file) => ({
+            create: savedImages.map((file, key) => ({
               url: file.path,
               name: file.originalName,
+              isPrincipal: images?.some(
+                (img, kImg) => kImg === key && img.isPrimary,
+              ),
             })),
           },
-          productLote : {
-            create : lots.map(lot => ({...lot, expirationDate : new Date(`${lot.expirationDate}T00:00:00.000Z`)}))
-          }
+          productLote: {
+            create: lots.map((lot) => ({
+              ...lot,
+              expirationDate: new Date(`${lot.expirationDate}T00:00:00.000Z`),
+            })),
+          },
         },
         include: {
           productImg: true,
+          productLote: true
         },
       });
-    } catch(error) {
-      console.log(error)
+    } catch (error) {
+      console.log(error);
       // Si falla Prisma, deben eliminarse los archivos
       // que ya se guardaron en el disco.
       await this.filesService.deleteProductImages(savedImages);

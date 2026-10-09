@@ -89,7 +89,16 @@ export class CreateProductDto {
   @Transform(({ value }) =>
     typeof value === 'string' ? JSON.parse(value) : value,
   )
-  images: number[];
+  images?: UpdateImg[];
+}
+export class UpdateImg {
+  @IsOptional()
+  @IsNumber()
+  id?: number;
+
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  isPrimary: boolean;
 }
 export class CreateLoteDto {
   @IsString()
