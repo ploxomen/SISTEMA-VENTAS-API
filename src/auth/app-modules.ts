@@ -1,10 +1,11 @@
 /**
  * Valores de la columna `module.url` que protege cada controlador.
- * Deben coincidir exactamente con los registros de la tabla `module`.
+ * Son las rutas del frontend (el menú enlaza a `module.url`), por lo que
+ * deben coincidir exactamente con los registros de la tabla `module`.
  */
 export const AppModules = {
-  USERS: '/usuarios',
-  ROLES: '/roles',
-  CATEGORIES: '/categorias',
-  BRANDS: '/marcas',
+  USERS: '/dashboard/user',
+  ROLES: '/dashboard/role',
+  CATEGORIES: '/dashboard/categorie',
+  BRANDS: '/dashboard/brand',
 } as const;
