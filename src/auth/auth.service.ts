@@ -105,9 +105,10 @@ export class AuthService {
     if (!token) {
       return;
     }
-    await this.prisma.refreshToken.updateMany({
-      where: { tokenHash: hashToken(token), revokedAt: null },
-      data: { revokedAt: new Date() },
+    // Se elimina (no se marca revocado): si luego llega este token, es un 401 normal
+    // y no dispara la detección de robo, que es solo para tokens ya rotados.
+    await this.prisma.refreshToken.deleteMany({
+      where: { tokenHash: hashToken(token) },
     });
   }
 

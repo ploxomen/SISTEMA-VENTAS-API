@@ -34,6 +34,7 @@ describe('AuthService', () => {
         create: vi.fn(),
         findFirst: vi.fn(),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: vi.fn(),
       },
       // getUserRoles se ejecuta dentro de una transacción
       $transaction: vi.fn().mockResolvedValue([]),
@@ -171,12 +172,22 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('revoca el refresh token por su hash', async () => {
+    it('elimina el refresh token por su hash', async () => {
       await service.logout('abc');
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { tokenHash: hashToken('abc'), revokedAt: null },
-        data: { revokedAt: expect.any(Date) },
+      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { tokenHash: hashToken('abc') },
       });
+    });
+
+    it('un token cerrado por logout da 401 sin cerrar las demás sesiones', async () => {
+      const token = await jwt.signAsync(
+        { sub: 1, type: 'refresh' },
+        { secret: env.JWT_REFRESH_SECRET, expiresIn: '7d' },
+      );
+      prisma.refreshToken.findFirst.mockResolvedValue(null);
+
+      await expect(service.refresh(token)).rejects.toThrow(UnauthorizedException);
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     });
   });
 });
