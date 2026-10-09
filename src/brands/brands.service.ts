@@ -27,7 +27,7 @@ export class BrandsService {
   }
 
   async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
-    return paginate(this.prisma.brand, paginationDto, {
+    const query = {
       select: {
         id: true,
         name: true,
@@ -35,7 +35,21 @@ export class BrandsService {
       orderBy: {
         name: 'desc',
       },
-    });
+    } as const;
+    const { page, limit } = paginationDto;
+    if (page === 0 && limit === 0) {
+      const brands = await this.prisma.brand.findMany(query);
+      return {
+        data: brands,
+        pagination: {
+          limit: 0,
+          page: 0,
+          total: brands.length,
+          totalPages: 0,
+        },
+      };
+    }
+    return paginate(this.prisma.brand, paginationDto, query);
   }
 
   async findOne(id: number) {

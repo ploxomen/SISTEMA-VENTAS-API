@@ -3,6 +3,14 @@ enum DocumentType {
   PASAPORTE
   CARNET_EXTRANJERIA
 }
+enum StatusGlobal {
+  DISABLED
+  ENABLED
+}
+enum TypeSupplier {
+  EMPRESA
+  PERSONA_NATURAL
+}
 enum StatusUser {
   ONLINE
   DISABLED
@@ -87,6 +95,7 @@ model Brand {
   name String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  products Product[]
   @@map("brand")
 }
 
@@ -145,6 +154,8 @@ model Product {
   category Category @relation(fields: [categoryId], references: [id])
   subcategoryId Int
   subcategory SubCategory @relation(fields: [subcategoryId], references: [id])
+  brandId Int
+  brand Brand @relation(fields: [brandId], references: [id])
   model String?
   initialStock Int
   minimunStock Int
@@ -179,4 +190,15 @@ model ProductLote {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@map("product_lote")
+}
+
+model Supplier {
+  id  Int @id @default(autoincrement())
+  type TypeSupplier @default(EMPRESA)
+  fullName String
+  numberDocument String?
+  email String?
+  phone String?
+  cellphone String 
+  status StatusGlobal @default(ENABLED)
 }

@@ -42,7 +42,7 @@ export class CategoriesService {
     };
   }
   async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
-    return paginate(this.prisma.category, paginationDto, {
+    const query = {
       select: {
         id: true,
         name: true,
@@ -56,7 +56,21 @@ export class CategoriesService {
       orderBy: {
         name: 'desc',
       },
-    });
+    } as const;
+    const { page, limit } = paginationDto;
+    if (page === 0 && limit === 0) {
+      const categories = await this.prisma.category.findMany(query);
+      return {
+        data: categories,
+        pagination: {
+          limit: 0,
+          page: 0,
+          total: categories.length,
+          totalPages: 0,
+        },
+      };
+    }
+    return paginate(this.prisma.category, paginationDto, query);
   }
   async findOne(id: number) {
     const category = await this.prisma.category.findUnique({
@@ -77,7 +91,10 @@ export class CategoriesService {
     }
     return category;
   }
-  async update(id: number, updateCategoryDto: UpdateCategoryDto) : Promise<ApiResourcesResponse<Category>> {
+  async update(
+    id: number,
+    updateCategoryDto: UpdateCategoryDto,
+  ): Promise<ApiResourcesResponse<Category>> {
     await this.findOne(id);
     const { subCategories, ...categoryData } = updateCategoryDto;
     await this.prisma.category.update({
@@ -106,11 +123,11 @@ export class CategoriesService {
       },
     });
     return {
-      message: "Categoría actualizada correctamente",
-      success: true
-    }
+      message: 'Categoría actualizada correctamente',
+      success: true,
+    };
   }
-  async remove(id: number) : Promise<ApiResourcesResponse<Category>> {
+  async remove(id: number): Promise<ApiResourcesResponse<Category>> {
     await this.findOne(id);
     await this.prisma.category.delete({
       where: { id },
@@ -119,8 +136,8 @@ export class CategoriesService {
       },
     });
     return {
-      message: "Categoría eliminada correctamente",
-      success: true
-    }
+      message: 'Categoría eliminada correctamente',
+      success: true,
+    };
   }
 }

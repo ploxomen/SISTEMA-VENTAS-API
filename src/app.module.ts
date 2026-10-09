@@ -11,6 +11,8 @@ import { RolesModule } from './roles/roles.module.js';
 import { ModulesModule } from './modules/modules.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProductsModule } from './products/products.module.js';
+import { FilesService } from './files/files.service.js';
+import { FilesModule } from './files/files.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -38,8 +40,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ModulesModule,
     AuthModule,
     ProductsModule,
+    FilesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, FilesService],
 })
 export class AppModule {}
