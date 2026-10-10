@@ -3,16 +3,16 @@ import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class PaginationDto {
   @IsOptional()
-  @Type(() => Number)
+  @Type(() => Number) // <-- Transforma el string de la URL a número
   @IsInt()
-  @Min(0)
-  page?: number = 0;
+  @Min(1)
+  page?: number = 1;
 
   @IsOptional()
-  @Type(() => Number)
+  @Type(() => Number) // <-- Transforma el string de la URL a número
   @IsInt()
-  @Min(0)
-  limit?: number = 0;
+  @Min(1)
+  limit?: number = 10;
 
   @IsOptional()
   @IsString()

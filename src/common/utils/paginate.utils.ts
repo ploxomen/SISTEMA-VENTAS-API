@@ -14,7 +14,7 @@ export async function paginate<
   queryArgs: Omit<FindManyArgs, 'skip' | 'take'> = {} as any,
 ): Promise<ApiListResponse<T>> {
   const { page = 1, limit = 10 } = paginationDto;
-  const skip = (page - 1) * 10;
+  const skip = (page - 1) * limit;
   const [data, total] = await Promise.all([
     model.findMany({
       ...queryArgs,
