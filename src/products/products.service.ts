@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -7,6 +7,8 @@ import { PaginationDto } from '../common/dto/pagination.dto.js';
 import { ApiListResponse } from '../common/interfaces/api-response.interface.js';
 import { paginate } from '../common/utils/paginate.utils.js';
 import { Prisma, Product } from '../generated/prisma/client.js';
+import { REQUEST } from '@nestjs/core';
+import type { Request } from 'express';
 type ProductWithRelations = Prisma.ProductGetPayload<{
   select: {
     id: true;
@@ -24,7 +26,11 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
+    @Inject(REQUEST) private readonly request: Request
   ) {}
+  getUrlBase():string{
+    return `${this.request.protocol}://${this.request.get('host')}`
+  }
   async create(
     createProductDto: CreateProductDto,
     imageFile: Express.Multer.File[],
@@ -107,7 +113,7 @@ export class ProductsService {
           price: parseFloat(product.salePrice.toString()),
           stock: product.initialStock,
           minimunStock: product.minimunStock,
-          url: principalImage ? principalImage.url : null,
+          url: principalImage ? this.getUrlBase() + principalImage.url : null,
           categoryName: product.category.name ?? 'Sin categoría',
         };
       }),
