@@ -104,6 +104,7 @@ export class ProductsService {
           description: true,
           salePrice: true,
           initialStock: true,
+          hasExpiration: true,
           minimunStock: true,
           brand: {
             select : {
@@ -150,8 +151,16 @@ export class ProductsService {
     };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} product`;
+  async findOne(id: number) {
+    return await this.prisma.product.findFirst({
+      include : {
+        productLote: true,
+        productImg: true
+      },
+      where : {
+        id
+      }
+    });
   }
 
   update(id: number, updateProductDto: UpdateProductDto) {
