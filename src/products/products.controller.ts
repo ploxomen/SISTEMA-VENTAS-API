@@ -16,7 +16,7 @@ import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { PaginationDto } from '../common/dto/pagination.dto.js';
+import { GetProductsDto } from './dto/get-product.dto.js';
 
 @Controller('products')
 export class ProductsController {
@@ -50,7 +50,7 @@ export class ProductsController {
   }
 
   @Get()
-  findAll(@Param() paginationDto: PaginationDto) {
+  findAll(@Query() paginationDto: GetProductsDto) {
     return this.productsService.findAll(paginationDto);
   }
 

@@ -1,14 +1,18 @@
-import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { FilesService } from '../files/files.service.js';
-import { PaginationDto } from '../common/dto/pagination.dto.js';
 import { ApiListResponse } from '../common/interfaces/api-response.interface.js';
 import { paginate } from '../common/utils/paginate.utils.js';
-import { Prisma, Product } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { REQUEST } from '@nestjs/core';
 import type { Request } from 'express';
+import { GetProductsDto } from './dto/get-product.dto.js';
 type ProductWithRelations = Prisma.ProductGetPayload<{
   select: {
     id: true;
@@ -16,8 +20,10 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
     description: true;
     salePrice: true;
     initialStock: true;
+    hasExpiration: true;
     minimunStock: true;
     category: { select: { name: true } };
+    brand: { select: { name: true } };
     productImg: { where: { isPrincipal: true }; select: { url: true } };
   };
 }>;
@@ -26,10 +32,10 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
-    @Inject(REQUEST) private readonly request: Request
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
-  getUrlBase():string{
-    return `${this.request.protocol}://${this.request.get('host')}`
+  getUrlBase(): string {
+    return `${this.request.protocol}://${this.request.get('host')}`;
   }
   async create(
     createProductDto: CreateProductDto,
@@ -74,7 +80,20 @@ export class ProductsService {
     }
   }
 
-  async findAll(paginationDto: PaginationDto): Promise<ApiListResponse<any>> {
+  async findAll(paginationDto: GetProductsDto): Promise<ApiListResponse<any>> {
+    let whereProduct: { categoryId?: number; subcategoryId?: number } = {};
+    if (
+      paginationDto?.categoryId !== undefined &&
+      paginationDto.categoryId !== 0
+    ) {
+      whereProduct.categoryId = paginationDto.categoryId;
+    }
+    if (
+      paginationDto?.subcategoryId !== undefined &&
+      paginationDto.subcategoryId !== 0
+    ) {
+      whereProduct.subcategoryId = paginationDto.subcategoryId;
+    }
     const products = await paginate<ProductWithRelations, any>(
       this.prisma.product as any,
       paginationDto,
@@ -86,6 +105,11 @@ export class ProductsService {
           salePrice: true,
           initialStock: true,
           minimunStock: true,
+          brand: {
+            select : {
+              name:  true
+            }
+          },
           category: {
             select: {
               name: true,
@@ -101,6 +125,9 @@ export class ProductsService {
             take: 1,
           },
         },
+        where: {
+          ...whereProduct,
+        },
       },
     );
     return {
@@ -115,6 +142,8 @@ export class ProductsService {
           minimunStock: product.minimunStock,
           url: principalImage ? this.getUrlBase() + principalImage.url : null,
           categoryName: product.category.name ?? 'Sin categoría',
+          brand: product.brand.name ?? 'Sin marca',
+          hasExpiration: product.hasExpiration
         };
       }),
       pagination: { ...products.pagination },
